@@ -4,6 +4,9 @@
 import sys, socket, json, random, datetime, hashlib
 
 
+def log(message):
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    print(f"SERVER LOG: [{current_time}] {message}")
 
 def generate_sessionID():
     #Return: a random 64 bit integer instring hexadecimal format.
@@ -11,16 +14,15 @@ def generate_sessionID():
 
     random_int = random.getrandbits(64)
     sessionID = hex(random_int)[2:]
-    sessionID = sessionID.zfill(16)
-
-    return sessionID
+    return sessionID.zfill(16)
 
 #This function generates a response for the actual HTTP request text that we've recieved from a client connection.
 #e.g. GET /images/picture.jpg HTTP/1.1 or something.
 def handle_request(request):
-    
-    print("Handle Request was called!")
-    
+    lines = request.split('\r\n')
+    method, path, ver = lines[0].split()
+    headers = {line.split(': ')[0]: line.split(': ')[1] for line in lines[1:] if line}
+    return method, path, headers, ver
     #TODO: handle POST requests for users logging in.
     
 
@@ -30,28 +32,56 @@ def handle_request(request):
     #return "HTTP/1.0 404 Not Found\r\n\r\nFile not found."
 
 #Start the server up and listen for client connections. Stop the server upon recieving ctrl + c.
-def start_server(ip, port):
+def start_server(ip, port, accounts, timeout, root_directory):
     #pass
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((ip, int(port)))
     server_socket.listen(1)
 
-
-    timeout = 3 # timeout length in seconds.
-    server_socket.settimeout(timeout) # Set the server to have a timeout in case it doesn't recieve a connection in time.
+    # server_socket.settimeout(timeout*1000) # Set the server to have a timeout in case it doesn't recieve a connection in time.
 
     print(f"Server listening on {ip}:{port}")
-
+    cookies = {}
     try:
         while True:
-            #print("test")
             client_socket, client_address = server_socket.accept()
             data = client_socket.recv(1024).decode('utf-8')
-            response = handle_request(data) #Call our method, handle_request() here.
-            client_socket.sendall(response.encode('utf-8'))
-            client_socket.close()
-
+            print(data)
+            method, path, headers, ver = handle_request(data) #Call our method, handle_request() here.
+            if method == "POST":
+                if path == '/':
+                    username = headers.get('username')
+                    password = headers.get('password')
+                    if not username or not password:
+                        client_socket.sendall("501 Not Implemented".encode('utf-8'))
+                        log("LOGIN FAILED")
+                    correct_pass, salt = accounts[username]
+                    password += salt
+                    m = hashlib.sha256()
+                    m.update(password.strip().encode('utf-8'))
+                    hexed_pass = m.hexdigest()
+                    if correct_pass == hexed_pass:
+                        log(f"LOGIN SUCCESSFUL: {username} : {password}")
+                        session_id = random.getrandbits(64)
+                        cookie = f"sessionID=0x{session_id:x}"
+                        cookies[cookie] = [username, datetime.datetime.now()]
+                        client_socket.sendall(f"{ver} 200 OK\nSet-Cookie: {cookie}\nContent-Length: 10\n\nLogged in!".encode('utf-8'))
+                    else:
+                        client_socket.sendall(f"{ver} 200 OK\nContent-Length: 13\n\nLogin failed!".encode('utf-8'))
+                        log(f"LOGIN FAILED: {username} : {password}")
+            if method == "GET":
+                user, timestamp = cookies[headers.get('Cookie')]
+                if not user:
+                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                if (datetime.datetime.now() - timestamp).seconds > timeout:
+                    log(f"SESSION EXPIRED: {user} : {path}")
+                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                with open(f"{root_directory}accounts/{user}{path}") as f:
+                    line = f.readlines()[0].strip()
+                    client_socket.sendall(
+                        f"{ver} 200 OK\nContent-Length: {len(line)}\n\n{line}".encode('utf-8'))
+                    log(f"GET SUCCEEDED: {user} : {path}")
     except KeyboardInterrupt: #ctrl + c to stop server.
         print("\nServer stopped.")
         #server_socket.close()
@@ -73,16 +103,16 @@ def main():
     accounts_file = sys.argv[3]
     session_timeout = int(sys.argv[4])
     root_directory = sys.argv[5]
-
+    accounts = json.loads(open(root_directory+accounts_file).readlines()[0])
     # Print the values for demonstration
-    print(f"IP Address: {ip}")
-    print(f"Ports: {port}")
-    print(f"Accounts File Name: {accounts_file}")
-    print(f"Session Timeout: {session_timeout}")
-    print(f"Root Directory Path: {root_directory}")
+    # print(f"IP Address: {ip}")
+    # print(f"Ports: {port}")
+    # print(f"Accounts File Name: {accounts_file}")
+    # print(f"Session Timeout: {session_timeout}")
+    # print(f"Root Directory Path: {root_directory}")
 
     #start the server here.
-    start_server(ip, port)
+    start_server(ip, port, accounts, session_timeout, root_directory)
 
 
 if __name__ == "__main__":
