@@ -41,13 +41,13 @@ def start_server(ip, port, accounts, timeout, root_directory):
 
     # server_socket.settimeout(timeout*1000) # Set the server to have a timeout in case it doesn't recieve a connection in time.
 
-    print(f"Server listening on {ip}:{port}")
+    # print(f"Server listening on {ip}:{port}")
     cookies = {}
     try:
         while True:
             client_socket, client_address = server_socket.accept()
             data = client_socket.recv(1024).decode('utf-8')
-            print(data)
+            # print(data)
             method, path, headers, ver = handle_request(data) #Call our method, handle_request() here.
             if method == "POST":
                 if path == '/':
@@ -56,7 +56,13 @@ def start_server(ip, port, accounts, timeout, root_directory):
                     if not username or not password:
                         client_socket.sendall("501 Not Implemented".encode('utf-8'))
                         log("LOGIN FAILED")
-                    correct_pass, salt = accounts[username]
+                        continue
+                    info = accounts.get(username)
+                    if not info:
+                        client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
+                        log(f"LOGIN FAILED: {username} : {password}")
+                        continue
+                    correct_pass, salt = info
                     password += salt
                     m = hashlib.sha256()
                     m.update(password.strip().encode('utf-8'))
@@ -66,22 +72,35 @@ def start_server(ip, port, accounts, timeout, root_directory):
                         session_id = random.getrandbits(64)
                         cookie = f"sessionID=0x{session_id:x}"
                         cookies[cookie] = [username, datetime.datetime.now()]
-                        client_socket.sendall(f"{ver} 200 OK\nSet-Cookie: {cookie}\nContent-Length: 10\n\nLogged in!".encode('utf-8'))
+                        client_socket.sendall(f"HTTP/1.0 200 OK\r\nSet-Cookie: {cookie}\n\r\n\rLogged in!".encode('utf-8'))
                     else:
-                        client_socket.sendall(f"{ver} 200 OK\nContent-Length: 13\n\nLogin failed!".encode('utf-8'))
+                        client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
                         log(f"LOGIN FAILED: {username} : {password}")
+                        continue
             if method == "GET":
-                user, timestamp = cookies[headers.get('Cookie')]
-                if not user:
+                if 'Cookie' not in headers:
                     client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                    continue
+                info = cookies.get(headers.get('Cookie'))
+                if not info:
+                    log(f"COOKIE INVALID: {path}")
+                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                    continue
+                user, timestamp = info
                 if (datetime.datetime.now() - timestamp).seconds > timeout:
                     log(f"SESSION EXPIRED: {user} : {path}")
                     client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                with open(f"{root_directory}accounts/{user}{path}") as f:
-                    line = f.readlines()[0].strip()
-                    client_socket.sendall(
-                        f"{ver} 200 OK\nContent-Length: {len(line)}\n\n{line}".encode('utf-8'))
-                    log(f"GET SUCCEEDED: {user} : {path}")
+                try:
+                    with open(f"{root_directory}{user}{path}") as f:
+                        line = f.readlines()[0].strip()
+                        client_socket.sendall(
+                            f"HTTP/1.0 200 OK\n\n{line}".encode('utf-8'))
+                        log(f"GET SUCCEEDED: {user} : {path}")
+                except FileNotFoundError:
+                    client_socket.sendall("404 NOT FOUND".encode('utf-8'))
+                    log(f"GET FAILED: {user} : {path}")
+                    continue
+            client_socket.close()
     except KeyboardInterrupt: #ctrl + c to stop server.
         print("\nServer stopped.")
         #server_socket.close()
@@ -103,7 +122,7 @@ def main():
     accounts_file = sys.argv[3]
     session_timeout = int(sys.argv[4])
     root_directory = sys.argv[5]
-    accounts = json.loads(open(root_directory+accounts_file).readlines()[0])
+    accounts = json.loads(open(accounts_file).readlines()[0])
     # Print the values for demonstration
     # print(f"IP Address: {ip}")
     # print(f"Ports: {port}")
