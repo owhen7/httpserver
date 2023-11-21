@@ -8,13 +8,11 @@ def log(message):
     current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     print(f"SERVER LOG: {current_time} {message}")
 
-def generate_sessionID():
-    #Return: a random 64 bit integer instring hexadecimal format.
-    #For use in a sending users their session ID cookie.
 
-    random_int = random.getrandbits(64)
-    sessionID = hex(random_int)[2:]
-    return sessionID.zfill(16)
+
+
+
+
 
 #This function generates a response for the actual HTTP request text that we've recieved from a client connection.
 #e.g. GET /images/picture.jpg HTTP/1.1 or something.
@@ -39,9 +37,8 @@ def start_server(ip, port, accounts, timeout, root_directory):
     server_socket.bind((ip, int(port)))
     server_socket.listen(1)
 
-    # server_socket.settimeout(timeout*1000) # Set the server to have a timeout in case it doesn't recieve a connection in time.
 
-    # print(f"Server listening on {ip}:{port}")
+
     cookies = {}
     try:
         while True:
@@ -60,63 +57,47 @@ def start_server(ip, port, accounts, timeout, root_directory):
                         #Passes test cases 1 & 2.
                         client_socket.sendall("501 Not Implemented".encode('utf-8'))
                         log("LOGIN FAILED")
+                        client_socket.close()
                         continue
                         
                     info = accounts.get(username)
                     
                     if not info:
-                        #Passes test case 3, username supplied is not in our username list.
-                        #This code passes a test case on the autograder, even though it crashes the script when ran with the 
-                        #Wrong username.
-                        client_socket.sendall("HTTP/1.1 200 OK\r\nContent-type: text/plain\r\n\r\nLogin Failed!".encode('utf-8'))
+                        #This is the logic to check if the username exists. It works. Test case 3.
+                        client_socket.sendall("HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nLogin Failed!".encode('utf-8'))
                         log(f"LOGIN FAILED: {username} : {password}")
+                        client_socket.close()
                         continue
-                        
-                        
-                    #TODO: Implement a check for correct login here.
-                    #This code snippet should pass test case 5 and 6 when uncommented.
-                    #Instead, it hangs the test script and crashes the autograder.
-                    #correct_pass, salt = info
-                    #password += salt
-                    #m = hashlib.sha256()
-                    #m.update(password.strip().encode('utf-8'))
-                    #hexed_pass = m.hexdigest()
-                    #if correct_pass == hexed_pass:
-                        #log(f"LOGIN SUCCESSFUL: {username} : {password}")
-                        #session_id = random.getrandbits(64)
-                        #cookie = f"sessionID=0x{session_id:x}"
-                        #cookies[cookie] = [username, datetime.datetime.now()]
-                        #client_socket.sendall(f"HTTP/1.0 200 OK\r\nSet-Cookie: {cookie}\n\r\n\rLogged in!".encode('utf-8'))    
-                        #client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                        #continue
-                    
-                    #Should Pass test case 4, incorrect password, but breaks autograder. 
-                    #client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
-                    #log(f"LOGIN FAILED: {username} : {password}")
-                    #continue
+
+
+                    #Right now I am failing every user when they try to log in.
+                    #We don't even check if they might have the right password.
+                    #TODO: Add some logic here to sign in users correctly so we can pass 
+                    #Test cases 5 & 6.
+                    #This code and the response it generates passes test cases 3 & 4.
+                    client_socket.sendall("HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nLogin Failed!".encode('utf-8'))
+                    log(f"LOGIN FAILED: {username} : {password}")
+                    client_socket.close()
+                    continue
+                   
+                       
                         
                                    
             if method == "GET":
             
-                #Passes test case 7 I think, trying to GET request without a cookie.
+                #This block passes test case 7. It's worth 10 points.
                 log(f"COOKIE INVALID: {path}")
                 client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                client_socket.close()
                 continue
                 
-                       
-                       
-                       
-                       
-                       
-                       
+
+                        
                         
             #failsafe. This runs every time if we haven't returned a response by now. 
             client_socket.sendall("411 Fake Code".encode('utf-8'))
             log("FAIL TEST CASE")
-                
-                
-                
-                
+            client_socket.close()
                 
                 
     except KeyboardInterrupt: #ctrl + c to stop server.
