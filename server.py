@@ -103,25 +103,33 @@ def start_server(ip, port, accounts, timeout, root_directory):
                     log(f"LOGIN FAILED: {username} : {password}")
                     client_socket.close()
                     continue
-                   
-                       
-                        
-                                   
+
             if method == "GET":
-            
-                #This block passes test case 7. It's worth 10 points.
-                log(f"COOKIE INVALID: {path}")
-                client_socket.sendall("HTTP/1.0 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\nUnauthorized".encode('utf-8'))
-
-                client_socket.close()
-                continue
-                
-
-                        
-                        
-            #failsafe. This runs every time if we haven't returned a response by now. 
-            client_socket.sendall("411 Fake Code".encode('utf-8'))
-            log("FAIL TEST CASE")
+                info = cookies.get(headers.get('Cookie').strip())
+                if not info:
+                    log(f"COOKIE INVALID: {path}")
+                    client_socket.sendall("HTTP/1.0 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\nUnauthorized".encode('utf-8'))
+                    client_socket.close()
+                    continue
+                user, timestamp = info
+                if (datetime.datetime.now() - timestamp).seconds > timeout:
+                    log(f"SESSION EXPIRED: {user} : {path}")
+                    client_socket.sendall("HTTP/1.0 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\nUnauthorized".encode('utf-8'))
+                    client_socket.close()
+                    continue
+                try:
+                    with open(f"{root_directory}{user}{path}") as f:
+                        line = f.readlines()[0].strip()
+                        client_socket.sendall(
+                            f"HTTP/1.0 200 OK\n\n{line}".encode('utf-8'))
+                        log(f"GET SUCCEEDED: {user} : {path}")
+                except FileNotFoundError:
+                    client_socket.sendall("404 NOT FOUND".encode('utf-8'))
+                    log(f"GET FAILED: {user} : {path}")
+                    client_socket.close()
+                    continue
+            # client_socket.sendall("411 Fake Code".encode('utf-8'))
+            # log("FAIL TEST CASE")
             client_socket.close()
                 
                 
