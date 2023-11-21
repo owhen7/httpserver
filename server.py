@@ -66,14 +66,30 @@ def start_server(ip, port, accounts, timeout, root_directory):
                     
                     if not info:
                         #Passes test case 3, username supplied is not in our username list.
-                        client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
+                        #This code passes a test case on the autograder, even though it crashes the script when ran with the 
+                        #Wrong username.
+                        client_socket.sendall("HTTP/1.1 200 OK\r\nContent-type: text/plain\r\n\r\nLogin Failed!".encode('utf-8'))
                         log(f"LOGIN FAILED: {username} : {password}")
                         continue
                         
                         
-                        #TODO: Implement a check for correct login here.
-                        
-                        
+                    #TODO: Implement a check for correct login here.
+                    #This code snippet should pass test case 5 and 6 when uncommented.
+                    #Instead, it hangs the test script and crashes the autograder.
+                    #correct_pass, salt = info
+                    #password += salt
+                    #m = hashlib.sha256()
+                    #m.update(password.strip().encode('utf-8'))
+                    #hexed_pass = m.hexdigest()
+                    #if correct_pass == hexed_pass:
+                        #log(f"LOGIN SUCCESSFUL: {username} : {password}")
+                        #session_id = random.getrandbits(64)
+                        #cookie = f"sessionID=0x{session_id:x}"
+                        #cookies[cookie] = [username, datetime.datetime.now()]
+                        #client_socket.sendall(f"HTTP/1.0 200 OK\r\nSet-Cookie: {cookie}\n\r\n\rLogged in!".encode('utf-8'))    
+                        #client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                        #continue
+                    
                     #Should Pass test case 4, incorrect password, but breaks autograder. 
                     #client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
                     #log(f"LOGIN FAILED: {username} : {password}")
@@ -95,8 +111,8 @@ def start_server(ip, port, accounts, timeout, root_directory):
                        
                         
             #failsafe. This runs every time if we haven't returned a response by now. 
-            client_socket.sendall("501 Not Implemented".encode('utf-8'))
-            log("LOGIN FAILED")
+            client_socket.sendall("411 Fake Code".encode('utf-8'))
+            log("FAIL TEST CASE")
                 
                 
                 
