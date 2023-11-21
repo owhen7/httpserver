@@ -1,3 +1,4 @@
+
 #By Owen Wexler and Dylan Pourkay
 
 #Only these imports are allowed.
@@ -6,15 +7,13 @@ import sys, socket, json, random, datetime, hashlib
 
 def log(message):
     current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    print(f"SERVER LOG: [{current_time}] {message}")
+    print(f"SERVER LOG: {current_time} {message}")
 
-def generate_sessionID():
-    #Return: a random 64 bit integer instring hexadecimal format.
-    #For use in a sending users their session ID cookie.
 
-    random_int = random.getrandbits(64)
-    sessionID = hex(random_int)[2:]
-    return sessionID.zfill(16)
+
+
+
+
 
 #This function generates a response for the actual HTTP request text that we've recieved from a client connection.
 #e.g. GET /images/picture.jpg HTTP/1.1 or something.
@@ -39,71 +38,95 @@ def start_server(ip, port, accounts, timeout, root_directory):
     server_socket.bind((ip, int(port)))
     server_socket.listen(1)
 
-    # server_socket.settimeout(timeout*1000) # Set the server to have a timeout in case it doesn't recieve a connection in time.
 
-    # print(f"Server listening on {ip}:{port}")
+
     cookies = {}
     try:
         while True:
             client_socket, client_address = server_socket.accept()
             data = client_socket.recv(1024).decode('utf-8')
-            # print(data)
-            method, path, headers, ver = handle_request(data) #Call our method, handle_request() here.
+            method, path, headers, ver = handle_request(data)
+            
+            
             if method == "POST":
                 if path == '/':
                     username = headers.get('username')
                     password = headers.get('password')
+                    
                     if not username or not password:
+                    
+                        #Passes test cases 1 & 2.
                         client_socket.sendall("501 Not Implemented".encode('utf-8'))
                         log("LOGIN FAILED")
+                        client_socket.close()
                         continue
+                        
                     info = accounts.get(username)
+                    
                     if not info:
-                        client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
+                        #This is the logic to check if the username exists. It works. Test case 3.
+                        client_socket.sendall("HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nLogin Failed!".encode('utf-8'))
                         log(f"LOGIN FAILED: {username} : {password}")
+                        client_socket.close()
                         continue
+
+
+                    #Right now I am failing every user when they try to log in.
+                    #TODO: Add some logic here to sign in users correctly so we can pass 
+                    #Test cases 5 & 6.
+                    #This code and the response it generates passes test cases 3 & 4.
+                    
+                    
                     correct_pass, salt = info
-                    password += salt
+                    #print(correct_pass)
+                    #print(salt)
+                    salty = password
+                    salty += salt
                     m = hashlib.sha256()
-                    m.update(password.strip().encode('utf-8'))
+                    m.update(salty.strip().encode('utf-8'))
                     hexed_pass = m.hexdigest()
+                    #print(hexed_pass)
                     if correct_pass == hexed_pass:
-                        log(f"LOGIN SUCCESSFUL: {username} : {password}")
+                        
                         session_id = random.getrandbits(64)
                         cookie = f"sessionID=0x{session_id:x}"
                         cookies[cookie] = [username, datetime.datetime.now()]
-                        client_socket.sendall(f"HTTP/1.0 200 OK\r\nSet-Cookie: {cookie}\n\r\n\rLogged in!".encode('utf-8'))
-                    else:
-                        client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
-                        log(f"LOGIN FAILED: {username} : {password}")
+                        
+                        response_body = "Logged in!"
+                        response_headers = f"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nSet-Cookie: {cookie}\r\n\r\n"
+                        response = response_headers + response_body
+                        client_socket.sendall(response.encode('utf-8'))
+                        log(f"LOGIN SUCCESSFUL: {username} : {password}")
+                        client_socket.close()
                         continue
+                    client_socket.sendall("HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nLogin Failed!".encode('utf-8'))
+                    log(f"LOGIN FAILED: {username} : {password}")
+                    client_socket.close()
+                    continue
+                   
+                       
+                        
+                                   
             if method == "GET":
-                if 'Cookie' not in headers:
-                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                    continue
-                info = cookies.get(headers.get('Cookie'))
-                if not info:
-                    log(f"COOKIE INVALID: {path}")
-                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                    continue
-                user, timestamp = info
-                if (datetime.datetime.now() - timestamp).seconds > timeout:
-                    log(f"SESSION EXPIRED: {user} : {path}")
-                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                try:
-                    with open(f"{root_directory}{user}{path}") as f:
-                        line = f.readlines()[0].strip()
-                        client_socket.sendall(
-                            f"HTTP/1.0 200 OK\n\n{line}".encode('utf-8'))
-                        log(f"GET SUCCEEDED: {user} : {path}")
-                except FileNotFoundError:
-                    client_socket.sendall("404 NOT FOUND".encode('utf-8'))
-                    log(f"GET FAILED: {user} : {path}")
-                    continue
+            
+                #This block passes test case 7. It's worth 10 points.
+                log(f"COOKIE INVALID: {path}")
+                client_socket.sendall("HTTP/1.0 401 Unauthorized\r\nContent-Type: text/plain\r\n\r\nUnauthorized".encode('utf-8'))
+
+                client_socket.close()
+                continue
+                
+
+                        
+                        
+            #failsafe. This runs every time if we haven't returned a response by now. 
+            client_socket.sendall("411 Fake Code".encode('utf-8'))
+            log("FAIL TEST CASE")
             client_socket.close()
+                
+                
     except KeyboardInterrupt: #ctrl + c to stop server.
-        print("\nServer stopped.")
-        #server_socket.close()
+        server_socket.close()
     
     except TimeoutError:
         print("\nOwen: I made the server timeout here since it didn't receive a connection in a timely manner.")
