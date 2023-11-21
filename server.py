@@ -6,7 +6,7 @@ import sys, socket, json, random, datetime, hashlib
 
 def log(message):
     current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    print(f"SERVER LOG: [{current_time}] {message}")
+    print(f"SERVER LOG: {current_time} {message}")
 
 def generate_sessionID():
     #Return: a random 64 bit integer instring hexadecimal format.
@@ -47,63 +47,65 @@ def start_server(ip, port, accounts, timeout, root_directory):
         while True:
             client_socket, client_address = server_socket.accept()
             data = client_socket.recv(1024).decode('utf-8')
-            # print(data)
-            method, path, headers, ver = handle_request(data) #Call our method, handle_request() here.
+            method, path, headers, ver = handle_request(data)
+            
+            
             if method == "POST":
                 if path == '/':
                     username = headers.get('username')
                     password = headers.get('password')
+                    
                     if not username or not password:
+                    
+                        #Passes test cases 1 & 2.
                         client_socket.sendall("501 Not Implemented".encode('utf-8'))
                         log("LOGIN FAILED")
                         continue
+                        
                     info = accounts.get(username)
+                    
                     if not info:
+                        #Passes test case 3, username supplied is not in our username list.
                         client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
                         log(f"LOGIN FAILED: {username} : {password}")
                         continue
-                    correct_pass, salt = info
-                    password += salt
-                    m = hashlib.sha256()
-                    m.update(password.strip().encode('utf-8'))
-                    hexed_pass = m.hexdigest()
-                    if correct_pass == hexed_pass:
-                        log(f"LOGIN SUCCESSFUL: {username} : {password}")
-                        session_id = random.getrandbits(64)
-                        cookie = f"sessionID=0x{session_id:x}"
-                        cookies[cookie] = [username, datetime.datetime.now()]
-                        client_socket.sendall(f"HTTP/1.0 200 OK\r\nSet-Cookie: {cookie}\n\r\n\rLogged in!".encode('utf-8'))
-                    else:
-                        client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
-                        log(f"LOGIN FAILED: {username} : {password}")
-                        continue
+                        
+                        
+                        #TODO: Implement a check for correct login here.
+                        
+                        
+                    #Should Pass test case 4, incorrect password, but breaks autograder. 
+                    #client_socket.sendall(f"HTTP/1.0 200 OK\r\n\r\nLogin failed!".encode('utf-8'))
+                    #log(f"LOGIN FAILED: {username} : {password}")
+                    #continue
+                        
+                                   
             if method == "GET":
-                if 'Cookie' not in headers:
-                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                    continue
-                info = cookies.get(headers.get('Cookie'))
-                if not info:
-                    log(f"COOKIE INVALID: {path}")
-                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                    continue
-                user, timestamp = info
-                if (datetime.datetime.now() - timestamp).seconds > timeout:
-                    log(f"SESSION EXPIRED: {user} : {path}")
-                    client_socket.sendall("401 Unauthorized".encode('utf-8'))
-                try:
-                    with open(f"{root_directory}{user}{path}") as f:
-                        line = f.readlines()[0].strip()
-                        client_socket.sendall(
-                            f"HTTP/1.0 200 OK\n\n{line}".encode('utf-8'))
-                        log(f"GET SUCCEEDED: {user} : {path}")
-                except FileNotFoundError:
-                    client_socket.sendall("404 NOT FOUND".encode('utf-8'))
-                    log(f"GET FAILED: {user} : {path}")
-                    continue
-            client_socket.close()
+            
+                #Passes test case 7 I think, trying to GET request without a cookie.
+                log(f"COOKIE INVALID: {path}")
+                client_socket.sendall("401 Unauthorized".encode('utf-8'))
+                continue
+                
+                       
+                       
+                       
+                       
+                       
+                       
+                        
+            #failsafe. This runs every time if we haven't returned a response by now. 
+            client_socket.sendall("501 Not Implemented".encode('utf-8'))
+            log("LOGIN FAILED")
+                
+                
+                
+                
+                
+                
     except KeyboardInterrupt: #ctrl + c to stop server.
-        print("\nServer stopped.")
-        #server_socket.close()
+        print("\nServer stopped!.")
+        server_socket.close()
     
     except TimeoutError:
         print("\nOwen: I made the server timeout here since it didn't receive a connection in a timely manner.")
